@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>CrystalVision</title>
+    <meta name="description" content="Edit or convert CSV files to XLSX, JSON, HTML Table and MarkDown">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="index.css" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter&display=swap" rel="stylesheet"> 
+    <script src="https://unpkg.com/alpinejs" defer></script>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+  </head>
+  <body>
+    <header>
+      <h1>CrystalVision</h1>
+      <p>A FREE CVS</p>
+      <p>editor/converter</p>
+    </header>
+    <div class="main" x-data="csvUpload()" x-init="loadData()">
+      <div class="buttons">
+        <input type="file" x-ref="fileInput" @change="uploadCsv($event)" style="display: none">
+        <button @click="openFile()">Open File</button>
+        <div class="save_as">
+          <p>Save as</p>
+          <input list="export_list" type="text" placeholder="XLSX" x-model="selectedFormat">
+          <datalist id="export_list">
+            <option value="XLSX">
+            <option value="JSON">
+            <option value="HTML">
+            <option value="MarkDown">
+            <option value="CVS">
+          </datalist>
+        </div>
+        <button @click="saveFile()">Save File</button>
+      </div>
+      <textarea
+        type="text"
+        placeholder="Start writing a CVS file here"
+        required
+        class="CVS_input"
+        name="CVS_input"
+        x-text="content"
+        @input="saveContent($event)">
+      </textarea>
+    </div>
+    <footer>
+      <h2>CrystalVision All Rights Reserved</h2>
+      <a href="https://thisisthecarm1ne.github.io/">support the creator</a>
+    </footer>
+  </body>
+  <script>
+    function csvToJson(csv){
+      var lines = csv.split("\n");
+      var result = [];
+      var headers = lines[0].split(",");
+
+      for(var i=1; i<lines.length; i++){
+        var obj = {};
+        var currentline = lines[i].split(",");
+
+        for(var j=0; j<headers.length; j++){
+          obj[headers[j]] = currentline[j];
+        }
+
+        result.push(obj);
+      }
+
+      return JSON.stringify(result, null, 2);
+    }
+    function csvToHtmlTable(csv) {
+      var lines = csv.split("\n");
+      var result = '<table>\n';
+
+      // headers
+      var headers = lines[0].split(",");
+      result += '<tr>\n';
+      for(var i=0; i<headers.length; i++){
+        result += '<th>' + headers[i] + '</th>\n';
+      }
+      result += '</tr>\n';
+
+      // data
+      for(var i=1; i<lines.length; i++){
+        var row = lines[i].split(",");
+        result += '<tr>\n';
+        for(var j=0; j<row.length; j++){
+          result += '<td>' + row[j] + '</td>\n';
+        }
+      result += '</tr>\n';
+      }
+
+      result += '</table>';
+      return result;
+    }
+    function csvToMarkdownTable(csv) {
+      var lines = csv.split("\n");
+      var result = '';
+
+      // headers
+      var headers = lines[0].split(",");
+      result += '| ' + headers.join(' | ') + ' |\n';
+      result += '| ' + headers.map(() => '---').join(' | ') + ' |\n';
+
+      // data
+      for(var i=1; i<lines.length; i++){
+        var row = lines[i].split(",");
+        result += '| ' + row.join(' | ') + ' |\n';
+      }
+
+      return result;
+    }
+    function csvUpload() {
+      return {
+        content: '',
+        selectedFormat: 'XLSX',
+        uploadCsv(event) {
+          let file = event.target.files[0];
+          let reader = new FileReader();
+          reader.onload = (e) => {
+            this.content = ''; // Clear the content before loading new file
+            this.content = e.target.result; // This is where the new file content is loaded
+            this.saveToLocalStorage();
+          };
+          reader.readAsText(file);
+          event.target.value = ''; // Clear the file input after file is read
+        },
+        loadData() {
+          if (!this.content) {
+            this.content = localStorage.getItem('csvContent') || '';
+          }
+        },
+        saveContent(event) {
+          this.content = event.target.value;
+          this.saveToLocalStorage();
+        },
+        saveToLocalStorage() {
+          localStorage.setItem('csvContent', this.content);
+        },
+        openFile() {
+          this.$refs.fileInput.click();
+        },
+        saveFile() {
+          let dataStr;
+          let fileName;
+          switch(this.selectedFormat) {
+            case 'JSON':
+              if(this.content.includes(',')) {
+                dataStr = `data:text/json;charset=utf-8,${encodeURIComponent(csvToJson(this.content))}`;
+              } else {
+                dataStr = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(this.content))}`;
+              }
+              fileName = "data.json";
+              break;
+            case 'HTML':
+              dataStr = `data:text/html;charset=utf-8,${encodeURIComponent(csvToHtmlTable(this.content))}`;
+              fileName = "data.html";
+              break;
+            case 'MarkDown':
+              dataStr = `data:text/markdown;charset=utf-8,${encodeURIComponent(csvToMarkdownTable(this.content))}`;
+              fileName = "data.md";
+              break;
+            case 'XLSX':
+              var wb = XLSX.utils.book_new();
+              var ws_name = "SheetJS";
+              /* make worksheet */
+              var aoa = this.content.split('\n').map(row => row.split(','));
+              var ws = XLSX.utils.aoa_to_sheet(aoa);
+              /* Add the worksheet to the workbook */
+              XLSX.utils.book_append_sheet(wb, ws, ws_name);
+              /* generate XLSX file and send to client */
+              fileName = "data.xlsx";
+              XLSX.writeFile(wb, fileName);
+              break;
+            default: // CSV
+              dataStr = `data:text/csv;charset=utf-8,${encodeURIComponent(this.content)}`;
+              fileName = "data.csv";
+          }
+          let downloadAnchorNode = document.createElement('a');
+          downloadAnchorNode.setAttribute("href", dataStr);
+          downloadAnchorNode.setAttribute("download", fileName);
+          document.body.appendChild(downloadAnchorNode); // required for firefox
+          downloadAnchorNode.click();
+          downloadAnchorNode.remove();
+        },
+      }
+    }
+  </script>
+</html>
